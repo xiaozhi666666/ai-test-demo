@@ -1,0 +1,242 @@
+name: Codex Auto Fix
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    # 只在 Claude Code 请求更改且 PR 有 codex-generated 标签时触发
+    if: |
+      github.event.review.state == 'changes_requested' &&
+      contains(github.event.pull_request.labels.*.name, 'codex-generated')
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Get PR Metadata
+        id: pr-meta
+        run: |
+          # 获取 PR 中的修复次数
+          FIX_COUNT=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body' | grep -oP 'Fix Count: \K\d+' || echo "0")
+          echo "fix_count=$FIX_COUNT" >> $GITHUB_OUTPUT
+
+          # 计算新的修复次数
+          NEW_FIX_COUNT=$((FIX_COUNT + 1))
+          echo "new_fix_count=$NEW_FIX_COUNT" >> $GITHUB_OUTPUT
+
+          # 检查是否超过最大次数
+          if [ $NEW_FIX_COUNT -gt 4 ]; then
+            echo "max_attempts_reached=true" >> $GITHUB_OUTPUT
+          else
+            echo "max_attempts_reached=false" >> $GITHUB_OUTPUT
+          fi
+
+          # 获取原始题目信息
+          PROBLEM_NUMBER=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body' | grep -oP 'Problem.*#\K\d+' || echo "")
+          echo "problem_number=$PROBLEM_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check Max Attempts
+        if: steps.pr-meta.outputs.max_attempts_reached == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "
+          ## ⚠️ 达到最大修复次数限制
+
+          此 PR 已经过 4 次自动修复尝试，但仍未通过审查。
+
+          **建议操作**：
+          1. 关闭当前 PR
+          2. 优化 \`ai-config/codex/system-prompt.md\` 中的提示词
+          3. 手动实现解决方案
+          4. 或寻求人工介入
+
+          ---
+
+          **审查历史**：
+          - 修复次数：${{ steps.pr-meta.outputs.new_fix_count }}
+          - 最大允许次数：4
+          "
+
+          # 添加标签标识需要人工介入
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "needs-manual-intervention" 2>/dev/null || true
+
+          exit 1
+
+      - name: Extract Review Feedback
+        id: feedback
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 获取最新的审查意见
+          REVIEW_BODY="${{ github.event.review.body }}"
+
+          # 保存审查意见到文件
+          echo "$REVIEW_BODY" > review-feedback.txt
+
+          echo "Review feedback saved to review-feedback.txt"
+          cat review-feedback.txt
+
+      - name: Get Current Implementation
+        id: current-code
+        run: |
+          # 查找问题文件
+          FILE_PATH=$(find src/problems -name "*$(printf '%03d' ${{ steps.pr-meta.outputs.problem_number }})*.ts" -type f | head -1)
+          echo "file_path=$FILE_PATH" >> $GITHUB_OUTPUT
+
+          if [ -n "$FILE_PATH" ]; then
+            echo "Found file: $FILE_PATH"
+          else
+            echo "File not found"
+            exit 1
+          fi
+
+      - name: Regenerate Code with Codex
+        id: regenerate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # 读取配置
+          SYSTEM_PROMPT=$(cat ai-config/codex/system-prompt.md)
+          TASK_CONTENT=$(cat tasks/current.md)
+          REVIEW_FEEDBACK=$(cat review-feedback.txt)
+          CURRENT_CODE=$(cat "${{ steps.current-code.outputs.file_path }}")
+
+          # 构建改进提示
+          IMPROVEMENT_PROMPT="
+          # Previous Implementation (REJECTED)
+
+          \`\`\`typescript
+          ${CURRENT_CODE}
+          \`\`\`
+
+          # Code Review Feedback
+
+          ${REVIEW_FEEDBACK}
+
+          # Task Requirements
+
+          ${TASK_CONTENT}
+
+          # Instructions
+
+          Based on the code review feedback above, please generate an IMPROVED implementation that addresses all the issues mentioned.
+
+          This is attempt ${{ steps.pr-meta.outputs.new_fix_count }} of 4. Make sure to:
+          1. Fix all issues mentioned in the review
+          2. Maintain or improve code quality
+          3. Keep all test cases passing
+          4. Follow TypeScript best practices
+          "
+
+          # 调用 OpenAI API 重新生成
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d '{
+              "model": "gpt-4",
+              "messages": [
+                {"role": "system", "content": "'"$SYSTEM_PROMPT"'"},
+                {"role": "user", "content": "'"$IMPROVEMENT_PROMPT"'"}
+              ],
+              "temperature": 0.3,
+              "max_tokens": 2000
+            }')
+
+          # 提取生成的代码
+          NEW_CODE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+          # 保存新代码
+          echo "$NEW_CODE" > "${{ steps.current-code.outputs.file_path }}"
+
+          echo "Code regenerated successfully"
+
+      - name: Run Tests
+        id: run-tests
+        continue-on-error: true
+        run: |
+          npm run test:single "${{ steps.current-code.outputs.file_path }}" > test-output.txt 2>&1
+          cat test-output.txt
+
+      - name: Commit and Push Changes
+        run: |
+          git config user.name "Codex Bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+          git add .
+          git commit -m "fix: auto-fix based on review feedback (attempt ${{ steps.pr-meta.outputs.new_fix_count }}/4)" || echo "No changes to commit"
+          git push
+
+      - name: Update PR with Fix Info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 读取测试输出
+          TEST_OUTPUT=$(cat test-output.txt || echo "No test output available")
+
+          # 评论更新
+          gh pr comment ${{ github.event.pull_request.number }} --body "
+          ## 🤖 Codex 自动修复 (尝试 ${{ steps.pr-meta.outputs.new_fix_count }}/4)
+
+          **修复说明**：
+          Codex 已根据审查反馈重新生成代码。
+
+          ### 📝 审查反馈
+
+          ${{ github.event.review.body }}
+
+          ### ✅ 测试结果
+
+          \`\`\`
+          ${TEST_OUTPUT}
+          \`\`\`
+
+          ---
+
+          **状态**：
+          - 修复次数：${{ steps.pr-meta.outputs.new_fix_count }}/4
+          - 提交哈希：\`$(git rev-parse --short HEAD)\`
+          - 时间：$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          请 Claude Code 重新审查更新后的代码。
+          "
+
+          # 更新 PR 描述中的修复次数
+          CURRENT_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
+
+          # 如果 body 中没有 Fix Count，添加它
+          if echo "$CURRENT_BODY" | grep -q "Fix Count:"; then
+            NEW_BODY=$(echo "$CURRENT_BODY" | sed "s/Fix Count: [0-9]*/Fix Count: ${{ steps.pr-meta.outputs.new_fix_count }}/")
+          else
+            NEW_BODY="${CURRENT_BODY}
+
+---
+
+**Auto-Fix Metadata**:
+- Fix Count: ${{ steps.pr-meta.outputs.new_fix_count }}
+- Max Attempts: 4
+"
+          fi
+
+          # 更新 PR 描述
+          gh pr edit ${{ github.event.pull_request.number }} --body "$NEW_BODY"
