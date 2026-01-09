@@ -1,0 +1,234 @@
+name: Codex Task Runner
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'task.md'
+  workflow_dispatch:
+
+jobs:
+  execute-task:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Read task from task.md
+        id: read-task
+        run: |
+          # Extract current task section from task.md
+          TASK_CONTENT=$(sed -n '/## Current Task/,/## Completed Tasks/p' task.md | head -n -2)
+          echo "task_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$TASK_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Check if there's a pending task
+          if echo "$TASK_CONTENT" | grep -q "Status.*pending"; then
+            echo "has_pending_task=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_pending_task=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Execute task with Codex
+        if: steps.read-task.outputs.has_pending_task == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Install dependencies if needed
+          if [ -f package.json ]; then
+            npm install
+          fi
+
+          # Create a script to interact with Claude API (Codex)
+          cat > execute_task.js << 'SCRIPT_EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          const apiKey = process.env.ANTHROPIC_API_KEY;
+          const taskContent = fs.readFileSync('task.md', 'utf8');
+
+          // Extract current task
+          const currentTaskMatch = taskContent.match(/## Current Task([\s\S]*?)## Completed Tasks/);
+          const currentTask = currentTaskMatch ? currentTaskMatch[1] : '';
+
+          if (!currentTask.includes('Status**: pending')) {
+            console.log('No pending task found');
+            process.exit(0);
+          }
+
+          // Read existing files for context
+          let projectContext = '';
+          try {
+            const files = fs.readdirSync('.', { recursive: true });
+            files.forEach(file => {
+              if (file.startsWith('.git')) return;
+              if (fs.statSync(file).isFile() && file.endsWith('.js')) {
+                projectContext += `\n\n=== ${file} ===\n${fs.readFileSync(file, 'utf8')}`;
+              }
+            });
+          } catch (e) {
+            // Ignore errors
+          }
+
+          const prompt = `You are Codex, an AI assistant executing tasks defined in task.md.
+
+Current project context:${projectContext}
+
+Your task:
+${currentTask}
+
+Please:
+1. Implement the solution according to the requirements
+2. Create/modify necessary files
+3. Output a JSON response with the following structure:
+{
+  "files": [
+    {"path": "file/path.js", "content": "file content here"}
+  ],
+  "summary": "Brief summary of changes made"
+}
+
+IMPORTANT: Only output valid JSON, nothing else.`;
+
+          const data = JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 4096,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }]
+          });
+
+          const options = {
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Length': data.length
+            }
+          };
+
+          const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', (chunk) => body += chunk);
+            res.on('end', () => {
+              try {
+                const response = JSON.parse(body);
+                const content = response.content[0].text;
+
+                // Extract JSON from response
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                  console.error('No JSON found in response');
+                  process.exit(1);
+                }
+
+                const result = JSON.parse(jsonMatch[0]);
+
+                // Create/modify files
+                result.files.forEach(file => {
+                  const dir = require('path').dirname(file.path);
+                  if (dir !== '.') {
+                    fs.mkdirSync(dir, { recursive: true });
+                  }
+                  fs.writeFileSync(file.path, file.content);
+                  console.log(`Created/modified: ${file.path}`);
+                });
+
+                // Save summary for PR description
+                fs.writeFileSync('CODEX_SUMMARY.txt', result.summary);
+                console.log('Task completed successfully');
+
+              } catch (err) {
+                console.error('Error processing response:', err);
+                console.error('Response body:', body);
+                process.exit(1);
+              }
+            });
+          });
+
+          req.on('error', (err) => {
+            console.error('API request failed:', err);
+            process.exit(1);
+          });
+
+          req.write(data);
+          req.end();
+          SCRIPT_EOF
+
+          node execute_task.js
+
+      - name: Create Pull Request
+        if: steps.read-task.outputs.has_pending_task == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Configure git
+          git config user.name "Codex Bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+
+          # Create a new branch
+          BRANCH_NAME="codex/task-$(date +%s)"
+          git checkout -b "$BRANCH_NAME"
+
+          # Stage changes
+          git add .
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # Commit changes
+          SUMMARY=$(cat CODEX_SUMMARY.txt || echo "Completed task from task.md")
+          git commit -m "feat: $SUMMARY" -m "Automated commit by Codex" -m "Co-Authored-By: Codex <codex-bot@users.noreply.github.com>"
+
+          # Push branch
+          git push origin "$BRANCH_NAME"
+
+          # Create PR using GitHub CLI
+          gh pr create \
+            --title "🤖 Codex: $SUMMARY" \
+            --body "$(cat <<EOF
+## Automated Task Completion
+
+**Task executed by**: Codex (Claude API)
+**Branch**: $BRANCH_NAME
+
+### Summary
+$SUMMARY
+
+### Details
+This PR was automatically created by the Codex bot after executing the task defined in task.md.
+
+### Next Steps
+- Claude Code will review this PR
+- If approved: PR will be merged and a new task will be added
+- If changes needed: task.md will be updated with feedback
+
+---
+🤖 Generated by Codex Task Runner
+EOF
+)" \
+            --label "codex-bot" \
+            --label "automated"
+
+          echo "PR_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
