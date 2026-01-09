@@ -1,43 +1,128 @@
 # 🚀 快速开始：Claude Code ↔ Codex 自动循环
 
-> **一键命令**：`/review-and-fix` - 自动审查 Codex 代码并触发修复循环
+> **超级一键命令**：`/solve-problem <编号>` - 从添加题目到合并代码，全自动完成！
 
 ---
 
-## ⚡ 10 秒快速开始
+## ⚡ 3 秒超快速开始
 
-### 1. 添加新题目（任选一种方式）
-
-**方式 A - 让 Claude Code 帮你**：
-```
-在 Claude Code 中说：
-"帮我在 current.md 添加 LeetCode #X 题目"
-```
-
-**方式 B - 手动添加**：
-```bash
-# 编辑 tasks/current.md，填入题目信息
-git add tasks/current.md
-git commit -m "task: add LeetCode #X"
-git push origin main
-```
-
-### 2. 等待 Codex 生成（自动，1-2 分钟）
-
-Codex 会自动：
-- ✅ 读取题目
-- ✅ 生成代码
-- ✅ 运行测试
-- ✅ 创建 PR
-
-### 3. 审查并修复（一键命令）
+### 真正的一键解决题目
 
 ```bash
-# 在 Claude Code 中运行
+/solve-problem 9
+```
+
+**就这一个命令**，自动完成：
+1. ✅ 获取题目信息（标题、描述、示例）
+2. ✅ 更新 current.md
+3. ✅ 提交并推送
+4. ✅ 创建 PR 触发 Codex
+5. ✅ 等待 Codex 生成
+6. ✅ 自动审查代码
+7. ✅ 自动修复（如需要，最多4次）
+8. ✅ 合并完成
+
+**就这么简单！** 🎉
+
+---
+
+## 📖 使用方式
+
+### 方式 1: 题目编号（最简单）
+
+```bash
+/solve-problem 9
+```
+
+### 方式 2: LeetCode URL
+
+```bash
+/solve-problem https://leetcode.com/problems/palindrome-number/
+```
+
+### 方式 3: 中文 LeetCode URL
+
+```bash
+/solve-problem https://leetcode.cn/problems/palindrome-number/
+```
+
+---
+
+## 🔄 完整流程演示
+
+```
+你: /solve-problem 9
+
+Claude: 🚀 开始自动化流程
+
+[1/8] 🔍 获取题目信息...
+      ✅ 完成 - Palindrome Number (Easy)
+
+[2/8] 📝 更新 current.md...
+      ✅ 完成
+
+[3/8] 💾 提交并推送...
+      ✅ 完成
+
+[4/8] 📋 创建 PR...
+      🔗 PR 链接: https://github.com/.../pull/new/...
+      ⏸️  请手动创建并合并 PR，完成后告诉我"继续"
+
+你: 继续
+
+Claude: [5/8] ⏳ 等待 Codex 生成...
+        ⏳ 检查中 (1/12)...
+        ✅ Codex 生成完成！
+
+[6/8] 🔍 代码审查...
+      ✅ 测试通过 (6/6)
+      ⭐ 评分: ⭐⭐⭐ (可改进)
+      📝 已请求修改
+
+[7/8] 🔄 修复循环...
+      ⏳ 尝试 1/4...
+      ✅ 修复完成
+      ⭐ 评分: ⭐⭐⭐⭐ (良好)
+      ✅ 已批准
+
+[8/8] 🎉 完成！
+      总耗时: 4 分钟
+      修复次数: 1/4
+
+🎉 题目完成！下一题？
+```
+
+---
+
+## 📊 两种模式对比
+
+### 🚀 超级模式（全自动）
+
+```bash
+/solve-problem 9
+```
+
+**完成步骤**: 全部 8 步
+**需要干预**: 只需创建 PR（1 次）
+**适合**: 想要全自动体验
+
+### ⚡ 分步模式（更灵活）
+
+**步骤 1**: 添加题目
+```
+"帮我在 current.md 添加 LeetCode #9"
+```
+
+**步骤 2**: 等待 Codex 生成（1-2 分钟）
+
+**步骤 3**: 审查并修复
+```bash
 /review-and-fix
 ```
 
-就这么简单！🎉
+**完成步骤**: 分 3 步
+**需要干预**: 创建 PR + 手动触发审查
+**适合**: 想要更多控制权
 
 ---
 
