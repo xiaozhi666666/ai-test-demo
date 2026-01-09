@@ -4,70 +4,62 @@
 ⏳ Pending
 
 ## Task Information
-- **Problem**: 20
-- **Title**: Valid Parentheses
+- **Problem**: 1
+- **Title**: Two Sum
 - **Difficulty**: Easy
-- **Link**: https://leetcode.com/problems/valid-parentheses/
+- **Link**: https://leetcode.com/problems/two-sum/
 
 ## Description
-Given a string `s` containing just the characters `'('`, `')'`, `'{'`, `'}'`, `'['` and `']'`, determine if the input string is valid.
+Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to target.
 
-An input string is valid if:
-1. Open brackets must be closed by the same type of brackets.
-2. Open brackets must be closed in the correct order.
-3. Every close bracket has a corresponding open bracket of the same type.
+You may assume that each input would have exactly one solution, and you may not use the same element twice.
+
+You can return the answer in any order.
 
 ## Examples
 
 ### Example 1:
 ```
-Input: s = "()"
-Output: true
+Input: nums = [2,7,11,15], target = 9
+Output: [0,1]
+Explanation: Because nums[0] + nums[1] == 9, we return [0, 1].
 ```
 
 ### Example 2:
 ```
-Input: s = "()[]{}"
-Output: true
+Input: nums = [3,2,4], target = 6
+Output: [1,2]
 ```
 
 ### Example 3:
 ```
-Input: s = "(]"
-Output: false
-```
-
-### Example 4:
-```
-Input: s = "([)]"
-Output: false
-```
-
-### Example 5:
-```
-Input: s = "{[]}"
-Output: true
+Input: nums = [3,3], target = 6
+Output: [0,1]
 ```
 
 ## Constraints
-- `1 <= s.length <= 10^4`
-- `s` consists of parentheses only `'()[]{}'`
+- `2 <= nums.length <= 10^4`
+- `-10^9 <= nums[i] <= 10^9`
+- `-10^9 <= target <= 10^9`
+- Only one valid answer exists
 
 ## Requirements
 - Implement the solution in TypeScript
 - Add comprehensive test cases
 - Aim for optimal time complexity (O(n))
 - Handle all edge cases
-- Use appropriate data structures (hint: stack)
+- Use appropriate data structures (hint: hash map)
 
 ## Hints
-- Use a stack data structure
-- When you encounter an opening bracket, push it onto the stack
-- When you encounter a closing bracket, check if it matches the top of the stack
-- If the stack is empty at the end, all brackets are matched
+- Use a hash map to store numbers and their indices
+- For each number, check if the complement (target - current number) exists in the hash map
+- This achieves O(n) time complexity instead of O(n²)
+
+## Follow-up
+Can you come up with an algorithm that is less than O(n²) time complexity?
 
 ---
 
 **Created**: 2026-01-09
-**Updated**: 2026-01-09 14:00
+**Updated**: 2026-01-09
 **Assigned To**: Codex
