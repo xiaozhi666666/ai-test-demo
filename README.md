@@ -37,7 +37,24 @@
 - ✅ Read and write permissions
 - ✅ Allow GitHub Actions to create and approve pull requests
 
-### 4. 安装依赖
+### 4. 创建 GitHub 标签（可选但推荐）
+
+标签用于自动标记和过滤 Codex 生成的 PR。
+
+```bash
+# 运行标签创建脚本
+./.github/scripts/create-labels.sh
+```
+
+或者手动在 GitHub UI 中创建以下标签：
+- `codex-generated` (绿色 #0E8A16) - Codex 自动生成的 PR
+- `test-failed` (红色 #D93F0B) - 测试失败的 PR
+- `claude-reviewed` (蓝色 #1D76DB) - Claude Code 已审查
+- `ready-to-merge` (蓝色 #0075CA) - 准备合并
+
+**注意**：即使不创建标签，系统仍然可以正常工作，只是无法通过标签过滤 PR。
+
+### 5. 安装依赖
 
 ```bash
 npm install
@@ -210,7 +227,19 @@ gh pr merge <PR_NUMBER> --squash --delete-branch
 
 ## 🔧 故障排查
 
-### Actions 未触发？
+### 常见问题快速解决
+
+#### ❌ Error: could not add label: 'codex-generated' not found
+
+**快速解决**：
+```bash
+# 运行标签创建脚本
+./.github/scripts/create-labels.sh
+```
+
+标签不存在不会影响系统运行，只是无法通过标签过滤 PR。详见 [完整故障排查指南](docs/TROUBLESHOOTING.md#标签相关问题)。
+
+#### ❌ Actions 未触发
 
 **检查项**：
 - [ ] `tasks/current.md` 已推送到 `main` 分支
@@ -226,7 +255,7 @@ gh run list --workflow=codex-worker.yml
 gh run view <RUN_ID> --log
 ```
 
-### PR 创建失败？
+#### ❌ PR 创建失败
 
 **检查项**：
 - [ ] Workflow permissions 已正确配置
@@ -263,6 +292,10 @@ npm run test:single "src/problems/<file-name>.ts"
 1. 检查 Secret 中的 `OPENAI_API_KEY` 是否正确
 2. 查看 Actions 日志中的具体错误信息
 3. 手动重新触发 workflow
+
+---
+
+**📖 更多问题？** 查看 [完整故障排查指南](docs/TROUBLESHOOTING.md) 获取详细解决方案。
 
 ## 📊 统计和监控
 
@@ -313,5 +346,8 @@ gh pr list --label "codex-generated" --state open
 - [任务管理](tasks/)
 - [代码实现](src/problems/)
 - [GitHub Actions](.github/workflows/)
+- [完整故障排查指南](docs/TROUBLESHOOTING.md)
+- [详细设置指南](docs/SETUP.md)
+- [架构文档](docs/ARCHITECTURE.md)
 
 有问题？[提交 Issue](https://github.com/xiaozhi/ai-demo/issues)

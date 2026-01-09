@@ -99,6 +99,7 @@ jobs:
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
       - name: Create Pull Request
+        id: create-pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -142,18 +143,28 @@ jobs:
           EOF
           )
 
-          # 创建 PR
-          gh pr create \
+          # 创建 PR（不添加标签，避免标签不存在的错误）
+          PR_URL=$(gh pr create \
             --title "🤖 Codex: LeetCode #${{ steps.parse-task.outputs.problem_number }} - ${{ steps.parse-task.outputs.problem_title }}" \
             --body "$PR_BODY" \
-            --label "codex-generated" \
-            --base main
+            --base main)
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "PR created: $PR_URL"
+
+          # 获取 PR 编号
+          PR_NUMBER=$(echo "$PR_URL" | grep -o '[0-9]*$')
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+          # 尝试添加标签（如果标签不存在会失败，但不影响 PR 创建）
+          gh pr edit "$PR_NUMBER" --add-label "codex-generated" 2>/dev/null || echo "Label 'codex-generated' not found, skipping"
 
       - name: Comment on Test Failure
         if: steps.run-tests.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --json number -q '.[0].number')
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
           gh pr comment "$PR_NUMBER" --body "⚠️ 测试失败，请 Claude Code 审查并修复"
-          gh pr edit "$PR_NUMBER" --add-label "test-failed"
+          # 尝试添加标签（如果标签不存在会失败，但不影响评论）
+          gh pr edit "$PR_NUMBER" --add-label "test-failed" 2>/dev/null || echo "Label 'test-failed' not found, skipping"

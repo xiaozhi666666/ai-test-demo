@@ -9,7 +9,10 @@ on:
 jobs:
   notify-for-review:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'codex-generated')
+    # 检查 PR 标题是否包含 "Codex" 或者有 codex-generated 标签
+    if: |
+      contains(github.event.pull_request.title, '🤖 Codex') ||
+      contains(github.event.pull_request.labels.*.name, 'codex-generated')
 
     steps:
       - name: Add Review Notification
