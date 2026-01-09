@@ -1,6 +1,35 @@
 {
-  "name": "ai-demo",
+  "name": "leetcode-ai-automation",
   "version": "1.0.0",
+  "description": "LeetCode AI 自动化练习系统 - Codex 自动生成代码，Claude Code 审查",
   "main": "index.js",
-  "license": "MIT"
+  "scripts": {
+    "test": "npm run test:all",
+    "test:all": "find src/problems -name '*.ts' ! -name 'example-template.ts' ! -name 'README.md' -exec node -r ts-node/register {} \\;",
+    "test:single": "node -r ts-node/register",
+    "test:easy": "find src/problems -name 'easy-*.ts' -exec node -r ts-node/register {} \\;",
+    "test:medium": "find src/problems -name 'medium-*.ts' -exec node -r ts-node/register {} \\;",
+    "test:hard": "find src/problems -name 'hard-*.ts' -exec node -r ts-node/register {} \\;",
+    "lint": "eslint 'src/**/*.ts'",
+    "format": "prettier --write 'src/**/*.ts'",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "leetcode",
+    "algorithm",
+    "codex",
+    "claude-code",
+    "automation",
+    "ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }

@@ -1,0 +1,90 @@
+name: Claude Code Review Trigger
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+
+jobs:
+  notify-for-review:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'codex-generated')
+
+    steps:
+      - name: Add Review Notification
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🤖 Claude Code Review Needed
+
+              这个 PR 是由 Codex 自动生成的，需要 Claude Code 进行审查。
+
+              ### 审查步骤：
+
+              1. **在 Claude Code CLI 中运行**：
+                 \`\`\`bash
+                 gh pr checkout ${context.issue.number}
+                 \`\`\`
+
+              2. **查看代码改动**：
+                 \`\`\`bash
+                 gh pr diff ${context.issue.number}
+                 \`\`\`
+
+              3. **运行测试**：
+                 \`\`\`bash
+                 npm test
+                 \`\`\`
+
+              4. **审查代码**：参考 [ai-config/claude/review-guide.md](../blob/main/ai-config/claude/review-guide.md)
+
+              5. **批准或请求修改**：
+                 \`\`\`bash
+                 # 批准
+                 gh pr review ${context.issue.number} --approve --body "✅ LGTM!"
+
+                 # 或请求修改
+                 gh pr review ${context.issue.number} --request-changes --body "需要修改的内容"
+                 \`\`\`
+
+              6. **合并 PR**（如果批准）：
+                 \`\`\`bash
+                 gh pr merge ${context.issue.number} --squash --delete-branch
+                 \`\`\`
+
+              ---
+
+              💡 **提示**：你也可以直接在 Claude Code 中说 "审查 PR #${context.issue.number}"
+              `
+            })
+
+      - name: Run Automated Checks
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            // 检查 PR 是否包含必要的文件
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const hasProblemFile = files.data.some(f => f.filename.startsWith('src/problems/'));
+
+            if (!hasProblemFile) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '⚠️ **警告**：此 PR 没有包含 `src/problems/` 目录下的文件'
+              });
+            }
