@@ -228,14 +228,7 @@ jobs:
           if echo "$CURRENT_BODY" | grep -q "Fix Count:"; then
             NEW_BODY=$(echo "$CURRENT_BODY" | sed "s/Fix Count: [0-9]*/Fix Count: ${{ steps.pr-meta.outputs.new_fix_count }}/")
           else
-            NEW_BODY="${CURRENT_BODY}
-
----
-
-**Auto-Fix Metadata**:
-- Fix Count: ${{ steps.pr-meta.outputs.new_fix_count }}
-- Max Attempts: 4
-"
+            NEW_BODY="${CURRENT_BODY}"$'\n\n'"----------------------------------------"$'\n\n'"**Auto-Fix Metadata**:"$'\n'"- Fix Count: ${{ steps.pr-meta.outputs.new_fix_count }}"$'\n'"- Max Attempts: 4"
           fi
 
           # 更新 PR 描述
